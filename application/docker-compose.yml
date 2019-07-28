@@ -1,6 +1,68 @@
 version: '3'
 
 services:
+
+  ganache:
+    image: trufflesuite/ganache-cli:latest
+    command: ganache-cli --accounts=10 --defaultBalanceEther=1000
+    expose:
+      - "8545"
+
+  truffle-offchain:
+    image: ajmay/truffle:5.0.9
+    environment:
+      SOLC_VERSION: 0.5.8
+      ETH_HOST: ganache
+      ETH_GAS: 6000000
+      ETH_GAS_PRICE: 20000000000
+    volumes:
+      - ./offchain/contracts:/truffle/contracts:delegated
+      - ./offchain/migrations/:/truffle/migrations:delegated
+      - ./offchain/build/contracts/:/truffle/build/contracts:cached
+      - ./offchain/test/:/truffle/test:delegated
+    depends_on:
+      - ganache
+    logging:
+      options:
+        max-size: 10m
+
+  truffle-zkp:
+    image: ajmay/truffle:5.0.9
+    environment:
+      SOLC_VERSION: 0.5.8
+      ETH_HOST: ganache
+      ETH_GAS: 6000000
+      ETH_GAS_PRICE: 20000000000
+    volumes:
+      - ./zkp/contracts/:/truffle/contracts:delegated
+      - ./zkp/migrations/:/truffle/migrations:delegated
+      - ./zkp/build/contracts/:/truffle/build/contracts:cached
+      - ./zkp/test/:/truffle/test:delegated
+      - ./zkp/src/:/truffle/src:delegated
+    depends_on:
+      - ganache
+    logging:
+      options:
+        max-size: 10m
+
+  zkp:
+    build:
+      context: ./zkp
+      dockerfile: Dockerfile
+    restart: on-failure
+    depends_on:
+      - ganache
+    volumes:
+      - ./zkp/src:/app/src
+      - ./zkp/response:/app/response
+      - ./zkp/build:/app/build
+      - ./zkp/code:/app/code
+      - ./zkp/.babelrc:/app/.babelrc
+      - ./zkp-utils:/app/node_modules/zkp-utils
+      - ./zkp/__tests__:/app/__tests__
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+
   accounts:
     build:
       context: ./accounts
@@ -44,25 +106,6 @@ services:
     environment:
       VIRTUAL_HOST: offchain.nightfall.docker
 
-  zkp:
-    build:
-      context: ./zkp
-      dockerfile: Dockerfile
-    restart: on-failure
-    depends_on:
-      - ganache
-    volumes:
-      - ./zkp/src:/app/src
-      - ./zkp/response:/app/response
-      - ./zkp/build:/app/build
-      - ./zkp/code:/app/code
-      - ./zkp/.babelrc:/app/.babelrc
-      - ./zkp-utils:/app/node_modules/zkp-utils
-      - ./zkp/__tests__:/app/__tests__
-      - ./config:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      VIRTUAL_HOST: zkp.nightfall.docker
 
   ui:
     build:
@@ -75,12 +118,6 @@ services:
       - ./ui/tsconfig.json:/app/tsconfig.json
     environment:
       VIRTUAL_HOST: nightfall.docker
-
-  ganache:
-    image: trufflesuite/ganache-cli:latest
-    command: ganache-cli --accounts=10 --defaultBalanceEther=1000
-    ports:
-      - 8545:8545
 
   database:
     build:
@@ -108,43 +145,6 @@ services:
     volumes:
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
       - mongo-volume:/data/db
-
-  truffle-offchain:
-    image: ajmay/truffle:5.0.9
-    environment:
-      SOLC_VERSION: 0.5.8
-      ETH_HOST: ganache
-      ETH_GAS: 6000000
-      ETH_GAS_PRICE: 20000000000
-    volumes:
-      - ./offchain/contracts:/truffle/contracts:delegated
-      - ./offchain/migrations/:/truffle/migrations:delegated
-      - ./offchain/build/contracts/:/truffle/build/contracts:cached
-      - ./offchain/test/:/truffle/test:delegated
-    depends_on:
-      - ganache
-    logging:
-      options:
-        max-size: 10m
-
-  truffle-zkp:
-    image: ajmay/truffle:5.0.9
-    environment:
-      SOLC_VERSION: 0.5.8
-      ETH_HOST: ganache
-      ETH_GAS: 6000000
-      ETH_GAS_PRICE: 20000000000
-    volumes:
-      - ./zkp/contracts/:/truffle/contracts:delegated
-      - ./zkp/migrations/:/truffle/migrations:delegated
-      - ./zkp/build/contracts/:/truffle/build/contracts:cached
-      - ./zkp/test/:/truffle/test:delegated
-      - ./zkp/src/:/truffle/src:delegated
-    depends_on:
-      - ganache
-    logging:
-      options:
-        max-size: 10m
 
 volumes:
   mongo-volume: {}

@@ -15,3 +15,4 @@ version [released on GitHub](https://github.com/EYBlockchain/nightfall/releases)
 
 We really appreciate your help in finding bugs and vulnerabilities in this repository. Please report
 bugs and vulnerabilities using [GitHub Issues](https://github.com/EYBlockchain/nightfall/issues).
+
