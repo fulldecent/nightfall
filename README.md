@@ -135,6 +135,16 @@ volumes, and images created by up, using
 docker-compose down -v
 ```
 
+## Development
+
+The instructions above are for using Nightfall as-is. If you will be tinkering with, studying or developing Nightfall then keep reading below.
+
+### Development prerequesites
+
+* Node version 12.6.0 or later
+
+
+
 ### To run tests (or if UI is not preferred)
 
 After following the steps from 'Installing Nightfall' section,

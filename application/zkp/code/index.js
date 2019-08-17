@@ -18,7 +18,7 @@ import Config from '../src/config';
 
 import zokrates from '../src/zokrates';
 
-const utils = require('../../zkp-utils/index.js'); // eslint-disable-line import/no-commonjs
+const utils = require('../zkp-utils/index.js'); // eslint-disable-line import/no-commonjs
 
 const config = Config.getProps();
 const isDirectory = source => fs.lstatSync(source).isDirectory();
@@ -308,22 +308,7 @@ async function filingChecks(codeFile, codeFileParentPath) {
   pwd += '/code/';
   // For .pcode files, create the .code file, so that we may use it in the container. The newly created codeFile is saved in codeFileParentPath dir by the codePreProp function.
   if (codeFileExt === 'pcode') {
-    // let's copy the .pcode file into the safe_dump dir in case things go wrong; so we don't lose our original file.
-    try {
-      await fs.copyFileSync(codeFilePath, `${pwd}safe-dump/${codeFile}`);
-      console.log(`${codeFilePath} was copied to safe-dump/${codeFile}`);
-    } catch (err) {
-      return new Error(err);
-    }
     await codePreProp.preProp1(codeFilePath, codeFileName, codeFileParentPath);
-  } else {
-    // .code file has been specified, but let's copy it into the safe_dump dir in case things go wrong; so we don't lose our original file.
-    try {
-      await fs.copyFileSync(codeFilePath, `${pwd}safe-dump/${codeFile}`);
-      console.log(`${codeFilePath} was copied to safe-dump/${codeFile}`);
-    } catch (err) {
-      return new Error(err);
-    }
   }
 
   await checkForImportFiles(codeFilePath, codeFileName, codeFileParentPath);
@@ -388,9 +373,6 @@ async function runSetup(a) {
   console.log(`pwd: ${pwd}`);
   const pwdName = pwd.substring(pwd.lastIndexOf('/') + 1, pwd.length);
   console.log(`pwdName: ${pwdName}`);
-  if (pwdName !== config.ZKP_PWD) {
-    throw new Error(`Wrong PWD. Please call this executable file from: ${config.ZKP_PWD}`);
-  }
   pwd += '/code/';
   console.groupEnd();
 
@@ -439,9 +421,6 @@ async function runSetupAll(a) {
   console.log(`pwd: ${pwd}`);
   const pwdName = pwd.substring(pwd.lastIndexOf('/') + 1, pwd.length);
   console.log(`pwdName: ${pwdName}`);
-  if (pwdName !== config.ZKP_PWD) {
-    throw new Error(`Wrong PWD. Please call this executable file from: ${config.ZKP_PWD}`);
-  }
   pwd += '/code/';
   console.groupEnd();
 

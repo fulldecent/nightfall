@@ -24,20 +24,20 @@ const web3 = new Web3(
     new Web3.providers.HttpProvider(`${config.zkp.rpc.host}:${config.zkp.rpc.port}`),
 );
 
-const NFTokenShield = contract(jsonfile.readFileSync('./build/contracts/NFTokenShield.json'));
+const NFTokenShield = contract(jsonfile.readFileSync('../contracts/NFTokenShield.json'));
 
 NFTokenShield.setProvider(web3.currentProvider);
 
 const Verifier_Registry = contract(
-  jsonfile.readFileSync('./build/contracts/Verifier_Registry.json'),
+  jsonfile.readFileSync('../contracts/Verifier_Registry.json'),
 );
 
 Verifier_Registry.setProvider(web3.currentProvider);
 
-const Verifier = contract(jsonfile.readFileSync('./build/contracts/GM17_v0.json'));
+const Verifier = contract(jsonfile.readFileSync('../contracts/GM17_v0.json'));
 Verifier.setProvider(web3.currentProvider);
 
-const NFTokenMetadata = contract(jsonfile.readFileSync('./build/contracts/NFTokenMetadata.json'));
+const NFTokenMetadata = contract(jsonfile.readFileSync('../contracts/NFTokenMetadata.json'));
 NFTokenMetadata.setProvider(web3.currentProvider);
 
 let container;

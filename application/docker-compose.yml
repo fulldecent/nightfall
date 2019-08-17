@@ -8,6 +8,24 @@ services:
     expose:
       - "8545"
 
+  zkp:
+    build:
+      context: ./zkp
+      dockerfile: Dockerfile
+    restart: on-failure
+    depends_on:
+      - ganache
+    volumes:
+      - ./zkp/src:/app/src
+      - ./zkp/response:/app/response
+      - ./zkp/build:/app/build
+      - ./zkp/code:/app/code
+      - ./zkp/.babelrc:/app/.babelrc
+      - ./zkp-utils:/app/node_modules/zkp-utils
+      - ./zkp/__tests__:/app/__tests__
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+
   truffle-offchain:
     image: ajmay/truffle:5.0.9
     environment:
@@ -44,24 +62,6 @@ services:
     logging:
       options:
         max-size: 10m
-
-  zkp:
-    build:
-      context: ./zkp
-      dockerfile: Dockerfile
-    restart: on-failure
-    depends_on:
-      - ganache
-    volumes:
-      - ./zkp/src:/app/src
-      - ./zkp/response:/app/response
-      - ./zkp/build:/app/build
-      - ./zkp/code:/app/code
-      - ./zkp/.babelrc:/app/.babelrc
-      - ./zkp-utils:/app/node_modules/zkp-utils
-      - ./zkp/__tests__:/app/__tests__
-      - ./config:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
 
   accounts:
     build:

@@ -1,6 +1,8 @@
-#
-# Based on https://github.com/github/gitignore/blob/master/Node.gitignore
-#
+
+# Created by https://www.gitignore.io/api/node
+# Edit at https://www.gitignore.io/?templates=node
+
+### Node ###
 # Logs
 logs
 *.log
@@ -23,7 +25,6 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
-*.lcov
 
 # nyc test coverage
 .nyc_output
@@ -46,9 +47,6 @@ jspm_packages/
 
 # TypeScript v1 declaration files
 typings/
-
-# TypeScript cache
-*.tsbuildinfo
 
 # Optional npm cache directory
 .npm
@@ -90,16 +88,13 @@ typings/
 # DynamoDB Local files
 .dynamodb/
 
-#
-# Customizations
-#
+# End of https://www.gitignore.io/api/node
+
 **/stats.json
 
-# Other zkp files
-# Ensures users who do their own local 'trusted setups' don't 'corrupt' the shared zkp files in the opensource repo.
+#other zkp files
+#ensures users who do their own local 'trusted setups' don't 'corrupt' the shared zkp files in the opensource repo.
 **/gm17/*/**
 !**/*.pcode
 !**/aux-*code
 **/vkIds.json
-**/safe-dump/**
-!**/safe-dump/README.md

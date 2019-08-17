@@ -24,18 +24,18 @@ const web3 = new Web3(
     new Web3.providers.HttpProvider(`${config.zkp.rpc.host}:${config.zkp.rpc.port}`),
 );
 
-const FTokenShield = contract(jsonfile.readFileSync('./build/contracts/FTokenShield.json'));
+const FTokenShield = contract(jsonfile.readFileSync('../contracts/FTokenShield.json'));
 FTokenShield.setProvider(web3.currentProvider);
 
 const VerifierRegistry = contract(
-  jsonfile.readFileSync('./build/contracts/Verifier_Registry.json'),
+  jsonfile.readFileSync('../contracts/Verifier_Registry.json'),
 );
 VerifierRegistry.setProvider(web3.currentProvider);
 
-const Verifier = contract(jsonfile.readFileSync('./build/contracts/GM17_v0.json'));
+const Verifier = contract(jsonfile.readFileSync('../contracts/GM17_v0.json'));
 Verifier.setProvider(web3.currentProvider);
 
-const FToken = contract(jsonfile.readFileSync('./build/contracts/FToken.json'));
+const FToken = contract(jsonfile.readFileSync('../contracts/FToken.json'));
 FToken.setProvider(web3.currentProvider);
 
 let container;

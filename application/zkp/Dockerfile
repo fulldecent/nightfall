@@ -1,16 +1,20 @@
-FROM node:11.15
+FROM node:10
 
-RUN mkdir /app
 WORKDIR /app
+
+COPY ./package.json ./package-lock.json ./
+COPY zkp-utils zkp-utils
+RUN npm ci
+RUN (cd node_modules/zkp-utils/ && npm ci)
 
 COPY src src
 COPY code code
-COPY .babelrc .babelrc
-COPY __tests__ __tests__
+COPY contracts contracts
+COPY migrations migrations
 COPY response response
-COPY zkp-utils zkp-utils
-COPY ./package.json ./package-lock.json ./
-RUN npm ci
+COPY __tests__ __tests__
+COPY test test
+COPY .babelrc .babelrc
 
 VOLUME build
 VOLUME config

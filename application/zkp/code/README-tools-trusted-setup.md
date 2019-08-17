@@ -106,7 +106,6 @@ zkp
         |
         ft-transfer.pcode
 
-    safe-dump   // required folder, in case of accidental overwriting from mounting of containers from the host.
       |
 ```
 
