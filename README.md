@@ -78,12 +78,6 @@ Start dotdocker:
 
 Clone the Nightfall repository and use a terminal to enter the directory.
 
-Next pull a compatible Docker image of ZoKrates
-
-```sh
-docker pull michaelconnor/zok:2Jan2019
-```
-
 Next we have to generate the keys and constraint files for Zero Knowledge Proofs
 ([read more](./zkp/code/README-tools-trusted-setup.md)), this is about 7GB and depends on randomness
 for security. This step can take a while, depending on your hardware. Before you start, check once
