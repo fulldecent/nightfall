@@ -14,7 +14,7 @@ responsibility for any loss you may incur through the use of this code.**
 
 As well as this file, please be sure to check out:
 
-- [The Whitepaper](./doc/whitepaper/nightfall-v1.pdf) for technical details on the protocols and
+- [The Whitepaper](./documentation/whitepaper/nightfall-v1.pdf) for technical details on the protocols and
   their application herein.
 - [contributions.md](./contributing.md) to find out how to contribute code.
 - [limitations.md](./limitations.md) to understand the limitations of the current code.
