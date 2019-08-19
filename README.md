@@ -90,7 +90,7 @@ for security. This step can take a while, depending on your hardware. Before you
 more that you have provisioned enough memory for Docker, as described above:
 
 ```sh
-npm run setupAll
+(cd application && npm run setup)
 ```
 
 Note that this is a completely automated run: although questions will be asked by the script they
@@ -149,7 +149,7 @@ docker-compose down -v
 
 After following the steps from 'Installing Nightfall' section,
 
-There is a volume conflict sometimes, please run `docker volume rm nightfall_zkp-code`
+There is a volume conflict sometimes, please run `docker volume rm nightfall_zkp-keys`
 
 Then run
 

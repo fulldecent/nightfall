@@ -258,35 +258,34 @@ function preProp2(data) {
   ).join(os.EOL);
 }
 
-function preProp1(pcode, codeFileName = 'nothing', codeDirName = 'nothing') {
-  if (pcode) {
-    let dataWhole = fs.readFileSync(pcode).toString('UTF8');
+/**
+ * Preprocess a .pcode file into a ZoKrates .code file
+ * 
+ * @param {String} pcodeInputPath path to input pcode file
+ * @param {String} codeOutputPath 
+ */
+function preProp1(pcodeInputPath, codeOutputPath) {
+  let dataWhole = fs.readFileSync(pcodeInputPath).toString('UTF8');
 
-    dataWhole = outerEllipsisNewLine(dataWhole);
-    dataWhole = outerEllipsisNewLine(dataWhole); // do it twice to pick up on nestings of the form { * { *# } }
+  dataWhole = outerEllipsisNewLine(dataWhole);
+  dataWhole = outerEllipsisNewLine(dataWhole); // do it twice to pick up on nestings of the form { * { *# } }
 
-    const dataLines = dataWhole.toString('UTF8').split(os.EOL);
-    const codeData = preProp2(dataLines);
+  const dataLines = dataWhole.toString('UTF8').split(os.EOL);
+  const codeData = preProp2(dataLines);
 
-    // If a codeFileName has been given (by other node functions) then save the newly created .code file in the ZKP_SAFE_DUMP folder with name codeFileName.code.
-    if (codeFileName !== 'nothing' && codeDirName !== 'nothing') {
-      fs.writeFileSync(
-        `${codeDirName + codeFileName}.code`,
-        codeData,
-        {
-          flag: 'w',
-        },
-        function lg(err) {
-          if (err) {
-            return console.log(err);
-          }
-          return console.log(`File: ${codeDirName}${codeFileName} created successfully`);
-        },
-      );
-    } else {
-      console.log(codeData);
-    }
-  } else console.log('No input file specified, running in TEST MODE');
+  fs.writeFileSync(
+    codeOutputPath,
+    codeData,
+    {
+      flag: 'w',
+    },
+    function lg(err) {
+      if (err) {
+        return console.log(err);
+      }
+      return console.log(`File: ${codeOutputPath}} created successfully`);
+    },
+  );
 }
 
 export default {

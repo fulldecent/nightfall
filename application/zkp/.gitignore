@@ -1,4 +1,11 @@
+## Nightfall specific ignores ##################################################
 
+# Docker Compose will mount to build/ 
+build
+# Docker Compose will mount to zkp-utils/
+zkp-utils
+
+################################################################################
 # Created by https://www.gitignore.io/api/node
 # Edit at https://www.gitignore.io/?templates=node
 
@@ -89,16 +96,3 @@ typings/
 .dynamodb/
 
 # End of https://www.gitignore.io/api/node
-
-build
-build-test
-src/vkIds.json
-
-#other zkp files
-#ensures users who do their own local 'trusted setups' don't 'corrupt' the shared zkp files in the opensource repo.
-**/gm17/*/**
-!**/*.pcode
-!**/aux-*code
-**/vkIds.json
-**/safe-dump/**
-!**/safe-dump/README.md

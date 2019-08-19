@@ -11,9 +11,9 @@ import os from 'os';
 
 /**
 @param {string} solFilePath
-@param {argv} s OPTIONAL argv which suppresses lengthy console outputs
+@param {argv} suppressLengthyOutput OPTIONAL argv which suppresses lengthy console outputs
 */
-async function keyExtractor(solFilePath, s) {
+async function keyExtractor(solFilePath, suppressLengthyOutput) {
   const solData = fs
     .readFileSync(solFilePath)
     .toString('UTF8')
@@ -43,7 +43,7 @@ async function keyExtractor(solFilePath, s) {
   const l = jsonTxt.length - 1;
   jsonTxt[l] = `${jsonTxt[l].substring(0, jsonTxt[l].length - 1)}]`; // remove last comma
   jsonTxt.push('}');
-  if (!s) console.log(jsonTxt.join('\n'));
+  if (!suppressLengthyOutput) console.log(jsonTxt.join('\n'));
   return jsonTxt.join('\n');
 }
 

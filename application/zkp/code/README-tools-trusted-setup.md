@@ -75,7 +75,7 @@ Then run the tool:
 
 Alternatively you can process _all_ of the folders under `/gm17` in one go by using:
 
-`npm run setup-all`
+`npm run setup`
 
 Note that this will take about 1hr to complete.
 
@@ -106,8 +106,6 @@ zkp
         |
         ft-transfer.pcode
 
-    safe-dump   // required folder, in case of accidental overwriting from mounting of containers from the host.
-      |
 ```
 
 Example to compile and generate a new (proving key, verification key) pair for a 'fungible token
@@ -148,12 +146,10 @@ zkp
         |
         ft-transfer.pcode
 
-    safe-dump
-      |
 ```
 
 If `-i` is not specified, the code will loop through every single folder within `gm17` and perform a
-trusted setup but will ask you before doing each one (unlike `npm run setup-all`, which won't ask).
+trusted setup but will ask you before doing each one (unlike `npm run setup`, which won't ask).
 This is done sequentially, because each setup requires a significant amount of computing resources.
 
 ### `-a`

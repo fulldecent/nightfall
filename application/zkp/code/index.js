@@ -1,15 +1,44 @@
 /**
-@module
-@author iAmMichaelConnor
-@desc Run from within nightfall/zkp/code
-E.g. node src/tools-trusted-setup.js
-*/
+ * @module
+ * @author iAmMichaelConnor, William Entriken
+ * @desc Run from within application/zkp
+ * 
+ * SYNOPSIS
+ * npx babel-node code/index.js setup [--code-path=path] [--build-bir=dir] [--quiet] [--delete]
+ * 
+ *   Perform trusted setup, compile to BUILD-DIR. Looks for "gm17" or "pghr13"
+ *   in code's path+filename to infer backend. File includes are not supported
+ *   at this time.
+ * 
+ *   The built files will be called: (see https://github.com/Zokrates/ZoKrates/issues/456)
+ *     - source.code The input source code, ready to compile
+ *     - out.code The compiled code, human readible
+ *     - out The compiled code, ZoKrates binary format
+ *     - proving.key The key to generate proofs, binary format
+ *     - proving.json The key to generate proofs, JSON format
+ *     - verification.key The key to verify proofs, binary format
+ *     - verification.json The key to verify proofs, JSON format
+ *     - verifier.sol Example of a verifier Solidity contract (not compliant with ERC-1922)
+ *     - variables.inf A list of the variables used in the R1CS
+ * 
+ * npx babel-node code/index.js witness --build-bir=dir --witness-args=args [--quiet] [--delete] 
+ * 
+ *   Compute witness for given witness arguments. This uses compiled.zcode and
+ *   proving.key in the build folder.
+ * 
+ * Options
+ * 
+ *   --code-path (defaults to ./code) can be a specific file or a directory
+ *   --build-dir (defaults to ./build) must be a directory
+ *   --verbose Suppress console streams
+ *   --delete Delete containers when finished
+ *   --witness-args Arguments for compute-witness
+ */
 
 import { argv } from 'yargs';
-import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import inquirer from 'inquirer';
+import glob from 'glob';
 
 import codePreProp from './tools-code-preprop';
 import keyExtractor from './tools-key-extractor';
@@ -18,38 +47,41 @@ import Config from '../src/config';
 
 import zokrates from '../src/zokrates';
 
-const utils = require('../../zkp-utils/index.js'); // eslint-disable-line import/no-commonjs
-
 const config = Config.getProps();
-const isDirectory = source => fs.lstatSync(source).isDirectory();
-const getDirectories = source =>
-  fs
-    .readdirSync(source)
-    .map(name => path.join(source, name))
-    .filter(isDirectory);
 
 let container;
 
-// SORT THROUGH ARGS:
+// HANDLE COMMAND LINE ARGUMENTS ///////////////////////////////////////////////
 
-// arguments to the command line:
-// i - filename
-const { i } = argv; // file name - //pass the my-code.code file as the '-i' parameter
+// action must be setup or witness
+const action = argv._[0];
+if (!action) {
+  throw new Error('Must use setup or witness action');
+}  
 
-// a - arguments for compute-witness
-const a0 = argv.a; // arguments for compute-witness (within quotes "")
-let a1 = [];
-if (!(a0 === undefined || a0 === '')) {
-  a1 = a0.split(' ');
-} else {
-  a1 = null;
-}
+// [--code-path path] (defaults to ./code) can be a specific file or a directory
+const codePath = argv["code-path"]
+  ? path.resolve(argv["code-path"])
+  : path.join(process.cwd(), "code");
 
-// s - suppress console streams
-const { s } = argv; // suppress - stream off if -s is specified
+// [--build-dir dir] (defaults to ./build) must be a directory
+console.log
+const mainBuildDirectory = argv["build-dir"]
+  ? path.resolve(argv["build-dir"])
+  : path.join(process.cwd(), "build");
 
-// d - delete finished containers (WARNING: might delete containers for which the setup failed, so you wouldn't be able to go in and investigate the problem)
-const { d } = argv;
+// [--quiet] Suppress console streams
+const suppressLengthyOutput = typeof argv["verbose"] === undefined;
+
+// [--delete] Delete finished containers
+const deleteContainersWhenFinished = argv["delete"];
+
+// [--witness-args args] Arguments for compute-witness
+const argumentsForComputeWitness = (argv["witness-args"] !== undefined && argv["witness-args"] !== '')
+  ? argv["witness-args"].split(' ')
+  : null;
+
+// FUNCTIONS ///////////////////////////////////////////////////////////////////
 
 /** create a promise that resolves to the output of a stream when the stream
 ends.  It also does some ZoKrates-specific error checking because not all 'errors'
@@ -75,201 +107,119 @@ const promisifyStream = stream =>
     stream.on('error', err => reject(err));
   });
 
-async function getImportFiles(dataLines) {
-  const cpDataLines = [...dataLines];
-  return cpDataLines.reduce((accArr, line) => {
-    // parses each line of the .code file for a line of the form:
-    // import "./aux-adder.code" as ADD
-    //  and extracts "./aux-adder.code"
-    // ZoKrates' own packages will be ignored, as they are of the form:
-    // import "LIBSNARK/sha256compression"
-    //  which doesn't include ".code", and so are ignored.
-    line.replace(/((import ")+(.+\.+code+)+("+))+?/g, (m1, m2, ii, c) => {
-      if (c !== undefined) {
-        accArr.push(c);
-      }
-    });
-    return accArr;
-  }, []);
-}
-
-async function checkForImportFiles(codeFilePath, codeFileName, codeFileParentPath) {
-  console.log(`Checking for 'import' files in the .code file ${codeFileName}`);
-
-  const dataLines = await fs
+/**
+ * Ensures there are no imports for user code in the source
+ * @param {String} codeFilePath
+ */
+async function checkForImportFiles(codeFilePath) {
+  const sourceCode = await fs
     .readFileSync(codeFilePath)
-    .toString('UTF8')
-    .split(os.EOL);
-
-  let importFiles = [];
-  importFiles = await getImportFiles(dataLines);
-  if (!(importFiles === undefined || importFiles.length === 0)) {
-    // array is nonempty
-    const len = importFiles.length;
-    for (let j = 0; i < len; j += 1) {
-      const file = importFiles[j];
-      try {
-        if (fs.existsSync(codeFileParentPath + file)) {
-          // file exists
-          console.log(`${file} is saved in the correct place`);
-        }
-      } catch (err) {
-        console.error(err);
-        console.error(`${file} not found in ${codeFileParentPath}`);
-      }
-    }
+    .toString('UTF8');
+  const searchResult = sourceCode.search(/((import ")+(.+\.+code+)+("+))+?/);
+  if (searchResult !== -1) {
+    throw new Error("User includes are not supported");
   }
 }
 
-async function setup(codeFile, outputDirPath, backend, a) {
-  const codeFileName = codeFile.substring(0, codeFile.lastIndexOf('.'));
+/**
+ * Compiles the file "source.code" build directory
+ * @param {String} buildDirectory Output directory path
+ * @param {String} backend gm17
+ */
+async function setup(buildDirectory, backend) {
+  if (backend !== "gm17") {
+    throw new Exception("Only GM17 backend is supported");
+  }
+  const buildDirectoryBasename = path.basename(buildDirectory);
 
-  console.log(`codeFileName: ${codeFileName}`);
-  console.log(`codeFile: ${codeFile}`);
-  console.log(`outputDirPath: ${outputDirPath}`);
-  console.log(`backend: ${backend}`);
-  console.log(`a: ${a}`);
+  console.group("Preparing for ZoKrates build");
+  console.log(`Project:         ${buildDirectoryBasename}`);
+  console.log(`Build directory: ${buildDirectory}`);
+  console.log(`Backend:         ${backend}`);
+  console.groupEnd();
 
   try {
-    container = await zokrates.runContainerMounted(outputDirPath);
-
+    container = await zokrates.runContainerMounted(buildDirectory);
     await container;
-
-    console.log(`\nContainer running for ${codeFileName}`);
-    console.log(`Container id for ${codeFileName}`, `: ${container.id}`);
+    console.log(`\nContainer running for ${buildDirectoryBasename}`);
+    console.log(`Container id for ${buildDirectoryBasename}`, `: ${container.id}`);
     console.log(
-      `To connect to the ${codeFileName}`,
-      ` container manually: 'docker exec -ti ${container.id} bash'`,
+      `To connect to the ${buildDirectoryBasename}`,
+      `container manually: 'docker exec -ti ${container.id} bash'`,
     );
 
-    console.group('\nCompile', codeFileName, '...');
-    // compile .code file
-    let output = await zokrates.compile(container, codeFile).catch(err => {
-      console.error(err);
-    });
-    if (!s) console.log(output);
-    console.log(codeFileName, 'SETUP MESSAGE: COMPILATION COMPLETE');
+    console.group('\nCompile', buildDirectoryBasename, '...');
+    let output = await zokrates.compile(container, "source.code", null, true);
+    if (!suppressLengthyOutput) console.log(output);
+    console.log(buildDirectoryBasename, 'SETUP MESSAGE: COMPILATION COMPLETE');
     console.groupEnd();
 
-    // optionally run a check on an input string (if parameter -a is specified at runtime)
-    if (a) {
-      console.group('\nComputing witness', codeFileName, '...');
-      output = await zokrates.computeWitness(container, a).catch(err => {
+    // trusted setup to produce proving key and verifying key
+    console.group('\nSetup', buildDirectoryBasename, '...');
+    output = await zokrates.setup(container);
+    if (!suppressLengthyOutput) console.log(output);
+    console.log('SETUP MESSAGE: SETUP COMPLETE');
+    console.groupEnd();
+
+    // create a verifier.sol
+    console.group('\nExport Verifier', buildDirectoryBasename, '...');
+    output = await zokrates.exportVerifier(container);
+    if (!suppressLengthyOutput) console.log(output);
+    console.log(buildDirectoryBasename, 'SETUP MESSAGE: EXPORT-VERIFIER COMPLETE');
+    console.groupEnd();
+
+    // move the newly created files into your 'code' folder within the zokrates container.
+    const exec = await container.exec
+      .create({
+        Cmd: [
+          '/bin/bash',
+          '-c',
+          `cp ${
+            config.ZOKRATES_OUTPUTS_DIRPATH_ABS
+          }{out,proving.key,verification.key,variables.inf,verifier.sol} ${
+            config.ZOKRATES_CONTAINER_CODE_DIRPATH_ABS
+          }`,
+        ],
+        AttachStdout: true,
+        AttachStderr: true,
+      })
+      .catch(err => {
         console.error(err);
       });
-      if (!s) console.log(output);
-      const lines = output.split(os.EOL);
-      const cpData = [...lines];
-      // ~out_130
-      let outVals = [];
-      const regex = /(~out_[0-9]+ )([0-9])+/g;
-      cpData
-        .filter(el => el.match(regex))
-        .map(el =>
-          el.replace(/(~out_[0-9]+ )([0-9])+/g, (m, out, _val) => {
-            const val = parseInt(_val, 10); // get the first number
-            outVals = outVals.concat(val);
-          }),
-        );
-      outVals = outVals.reverse(); // the outputs of zokrates are the wrong way around
+    output = await promisifyStream(await exec.start());
+    if (!suppressLengthyOutput) console.log(output);
+    console.log(
+      buildDirectoryBasename,
+      `SETUP MESSAGE: FILES COPIED TO THE MOUNTED DIR WITHIN THE CONTAINER. THE FILES WILL NOW ALSO EXIST WITHIN YOUR LOCALHOST'S FOLDER: ${buildDirectory}`,
+    );
 
-      if (!s) console.log(`outVals: \n${outVals}`);
+    console.group('\nKey extraction', buildDirectoryBasename, '...');
 
-      let outVal;
-      switch (utils.isProbablyBinary(outVals)) {
-        case 'decimal':
-          console.group('\nOutput from compute-witness:\n');
-          console.log(`output array length: ${outVals.length}\n`);
-          console.log(`bin:  ${outVals.forEach(val => utils.decToBin(val))}`);
-          console.log(`dec:  ${outVals}`);
-          console.log(`hex:  ${outVals.forEach(val => utils.decToHex(val))}`);
-          console.groupEnd();
-          break;
-        default:
-          outVal = outVals.join('');
-          console.group('\nOutput from compute-witness:\n');
-          console.log(`output array length: ${outVals.length}\n`);
-          console.log(`bin:  ${outVal}`);
-          console.log(`dec:  ${utils.binToDec(outVal)}`);
-          console.log(`hex:  ${utils.binToHex(outVal)}`);
-          console.groupEnd();
-      }
-      console.log(codeFileName, 'SETUP MESSAGE: CREATE WITNESS COMPLETE');
-      console.groupEnd();
-    } else {
-      // the below runs only if arg '-a' is NOT specified.
-      // i.e. you can either compute a witness by specifying '-a', OR you can create a tar file...
+    // extract a JSON representation of the vk from the exported Verifier.sol contract.
+    const vkJSON = await keyExtractor.keyExtractor(`${buildDirectory}verifier.sol`, suppressLengthyOutput);
 
-      // trusted setup to produce pk and vk
-      console.group('\nSetup', codeFileName, '...');
-      output = await zokrates.setup(container).catch(err => {
-        console.error(err);
-      });
-      if (!s) console.log(output);
-      console.log('SETUP MESSAGE: SETUP COMPLETE');
-      console.groupEnd();
-
-      // create a verifier.sol
-      console.group('\nExport Verifier', codeFileName, '...');
-      output = await zokrates.exportVerifier(container).catch(err => {
-        console.error(err);
-      });
-      if (!s) console.log(output);
-      console.log(codeFileName, 'SETUP MESSAGE: EXPORT-VERIFIER COMPLETE');
-      console.groupEnd();
-
-      // move the newly created files into your 'code' folder within the zokrates container.
-      const exec = await container.exec
-        .create({
-          Cmd: [
-            '/bin/bash',
-            '-c',
-            `cp ${
-              config.ZOKRATES_OUTPUTS_DIRPATH_ABS
-            }{out,out.code,proving.key,verification.key,variables.inf,verifier.sol} ${
-              config.ZOKRATES_CONTAINER_CODE_DIRPATH_ABS
-            }`,
-          ],
-          AttachStdout: true,
-          AttachStderr: true,
-        })
-        .catch(err => {
+    if (vkJSON) {
+      fs.writeFileSync(`${buildDirectory + buildDirectoryBasename}-vk.json`, vkJSON, function logErr(err) {
+        if (err) {
           console.error(err);
-        });
-      output = await promisifyStream(await exec.start());
-      if (!s) console.log(output);
-      console.log(
-        codeFileName,
-        `SETUP MESSAGE: FILES COPIED TO THE MOUNTED DIR WITHIN THE CONTAINER. THE FILES WILL NOW ALSO EXIST WITHIN YOUR LOCALHOST'S FOLDER: ${outputDirPath}`,
-      );
-
-      console.group('\nKey extraction', codeFileName, '...');
-
-      // extract a JSON representation of the vk from the exported Verifier.sol contract.
-      const vkJSON = await keyExtractor.keyExtractor(`${outputDirPath}verifier.sol`, s);
-
-      if (vkJSON) {
-        fs.writeFileSync(`${outputDirPath + codeFileName}-vk.json`, vkJSON, function logErr(err) {
-          if (err) {
-            console.error(err);
-          }
-        });
-        console.log(`File: ${outputDirPath}${codeFileName}-vk.json created successfully`);
-      }
-      console.groupEnd();
+        }
+      });
+      console.log(`File: ${buildDirectory}${buildDirectoryBasename}-vk.json created successfully`);
     }
-    if (!d) {
+    console.groupEnd();
+
+    if (!deleteContainersWhenFinished) {
       console.log(
-        `\nTo connect to the ${codeFileName} container manually: 'docker exec -ti ${
+        `\nTo connect to the ${buildDirectoryBasename} container manually: 'docker exec -ti ${
           container.id
         } bash'`,
       );
     } else {
       await zokrates.killContainer(container);
-      console.log(`container ${container.id} killed`);
+      console.log(`container ${container.id} killed, because --delete specified`);
     }
 
-    console.log(`${codeFileName} SETUP COMPLETE`);
+    console.log(`${buildDirectoryBasename} SETUP COMPLETE`);
   } catch (err) {
     console.log(err);
     console.log(
@@ -279,256 +229,118 @@ async function setup(codeFile, outputDirPath, backend, a) {
       "\nYou can go to Docker's settings and increase the RAM being allocated to Docker. See the README for more details.",
       '\n******************************************************************************************************************',
     );
-    return new Error(err);
+    throw new Error(err);
   }
-  return true; // looks like it worked. Return something for consistency
 }
 
 /**
-@param {string} codeFile A filename string of the form "my-code.code" or "my-code.pcode"
-@param {string} codeFileParentPath The path to, but not including, the codeFile.
-@param {string} a OPTIONAL A string of arguments, separated by space characters only.
-*/
-async function filingChecks(codeFile, codeFileParentPath) {
-  /**
-  codeFilePath: e.g. "./code/my-code.code"
-  codeFile: e.g. "my-code.code"
-  codeFileName: e.g. "my-code"
-  codeFileExt: e.g. "code"
-  */
-  console.log(`\nFiling checks for codeFile: ${codeFile}`);
-  // check we're working with either a .code or a .pcode file.
-  const codeFileName = await codeFile.substring(0, codeFile.lastIndexOf('.'));
-  const codeFileExt = await codeFile.substring(codeFile.lastIndexOf('.') + 1, codeFile.length);
-  if (!(codeFileExt === 'code' || codeFileExt === 'pcode')) {
-    return new Error("Invalid file extenstion. Expected a '.code' or a '.pcode' file.");
-  }
-  const codeFilePath = codeFileParentPath + codeFile;
-  let pwd = process.cwd();
-  pwd += '/code/';
-  // For .pcode files, create the .code file, so that we may use it in the container. The newly created codeFile is saved in codeFileParentPath dir by the codePreProp function.
-  if (codeFileExt === 'pcode') {
-    // let's copy the .pcode file into the safe_dump dir in case things go wrong; so we don't lose our original file.
-    try {
-      await fs.copyFileSync(codeFilePath, `${pwd}safe-dump/${codeFile}`);
-      console.log(`${codeFilePath} was copied to safe-dump/${codeFile}`);
-    } catch (err) {
-      return new Error(err);
-    }
-    await codePreProp.preProp1(codeFilePath, codeFileName, codeFileParentPath);
+ * Handle all preprocessing on file and save to buildDirectory/source.code
+ * 
+ * @param {String} codeFile A filename string of the form "my-code.code" or "my-code.pcode"
+ * @param {String} buildDirectory The path to, but not including, the codeFile, for output.
+ */
+async function performPreprocessing(codeFilePath, buildDirectory) {
+  const codeFileExt = path.extname(codeFilePath);
+  if (codeFileExt === '.pcode') {
+    console.log(`Processing .pcode to .code and saving to build folder`);
+    // For .pcode files, create the .code file, so that we may use it in the container. The newly created codeFile is saved in buildDirectory dir by the codePreProp function.
+    await codePreProp.preProp1(codeFilePath, path.join(buildDirectory, "source.code"), buildDirectory);
+  } else if (codeFileExt === '.code') {
+    console.log(`Copying .code to build folder`);
+    // .code file has been specified, preprocessing is not required
+    fs.copyFileSync(codeFilePath, path.join(buildDirectory, "source.code"));
   } else {
-    // .code file has been specified, but let's copy it into the safe_dump dir in case things go wrong; so we don't lose our original file.
-    try {
-      await fs.copyFileSync(codeFilePath, `${pwd}safe-dump/${codeFile}`);
-      console.log(`${codeFilePath} was copied to safe-dump/${codeFile}`);
-    } catch (err) {
-      return new Error(err);
-    }
+    return new Error("Invalid file extenstion. Expected .code or .pcode extension.");
   }
 
-  await checkForImportFiles(codeFilePath, codeFileName, codeFileParentPath);
-
-  console.groupEnd();
-  return codeFileName;
+  await checkForImportFiles(codeFilePath);
 }
 
-function readdirAsync(_path) {
-  return new Promise(function prm(resolve, reject) {
-    fs.readdir(_path, function rdr(error, result) {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+/**
+ * Throws if directory is not empty, used to prevent clobbering build files
+ * 
+ * @param {String} dir the directory path to inspect
+ */
+async function ensureBuildDirectoryIsEmpty(dir) {
+  if (!fs.existsSync(dir)) return;
+  const files = fs.readdirSync(dir);
+  if (files.length === 0) return;
+  console.log("ERROR: build directory is not empty, you must empty this directory before setup can proceed");
+  console.log(dir);
+  throw new Error("Build directory is not empty");
 }
 
-async function checkForOldFiles(dir) {
-  const files = await readdirAsync(dir);
-
-  console.log('\n\nFound existing files:', files, 'in', dir);
-  console.log(
-    "\n\nIf you continue, these files will be deleted (except for the '.pcode' file and any '.code' dependencies).",
-  );
-
-  const carryOn = await inquirer.prompt([
-    {
-      type: 'skip',
-      name: 'skip',
-      message: 'Continue with the trusted setup? y/n ',
-      choices: ['y', 'n'],
-    },
-  ]);
-  if (carryOn.skip !== 'y') return false;
-
-  return files;
+/**
+ * Guess which backend is used based on filename
+ * @param {String} codeFile 
+ */
+function inferBackendFromFilePath(codeFile) {
+  const backend = codeFile.indexOf('gm17') !== -1
+    ? "gm17"
+    : codeFile.indexOf('pghr13') !== -1
+      ? "pghr13" // NOTE: this tool supports PGHR13, but the wider Nightfall opensource repo does not
+      : null;
+  if (backend === null) {
+    throw new Error("The code must have gm17 or pghr13 in the full path to indicated the backend to use");
+  }
+  return backend;
 }
 
-async function rmOldFiles(dir, files) {
-  for (let j = 1; j < files.length; j += 1) {
-    const filePrefix = files[j].substring(0, 3);
-    const fileExt = files[j].substring(files[j].lastIndexOf('.') + 1, files[j].length);
-    if (!(fileExt === 'pcode' || filePrefix === 'aux')) {
-      console.log('deleting', files[j]);
-      fs.unlink(path.join(dir, files[j]), err => {
-        if (err) throw err;
-      });
-    }
-  }
-  const remainingFiles = await readdirAsync(dir);
-  console.log('\nFiles remaining:', remainingFiles, 'in', dir);
-}
-
-// RUN
-async function runSetup(a) {
-  // check we're parsing the correct directory:
-  console.group('Checking pwd...');
-  let pwd = process.cwd();
-  console.log(`pwd: ${pwd}`);
-  const pwdName = pwd.substring(pwd.lastIndexOf('/') + 1, pwd.length);
-  console.log(`pwdName: ${pwdName}`);
-  if (pwdName !== config.ZKP_PWD) {
-    throw new Error(`Wrong PWD. Please call this executable file from: ${config.ZKP_PWD}`);
-  }
-  pwd += '/code/';
-  console.groupEnd();
-
-  const dir = pwd + i;
-  console.log(`directory: ${dir}`);
-
-  let backend;
-  if (i.indexOf('pghr13') >= 0) {
-    backend = 'pghr13'; // NOTE: although this tool supports PGHR13, the wider Nightfall opensource repo does not support pghr13.
-  } else if (i.indexOf('gm17') >= 0) {
-    backend = 'gm17';
-  } else {
-    throw new Error("Incorrect backend or folder specified. Expected either 'pghr13' or 'gm17'.");
-  }
-
-  let files = await checkForOldFiles(dir);
-  if (files === false) {
-    throw new Error('user cancelled the setup');
-  }
-  await rmOldFiles(dir, files);
-
-  files = await readdirAsync(dir);
-
-  // filter all files for ones with extension .code or .pcode
-  files = files.filter(f => {
-    const codeFileExt = f.substring(f.lastIndexOf('.') + 1, f.length);
-    const codeFilePrefix = f.substring(0, 3);
-    if (codeFileExt !== 'pcode' || codeFilePrefix === 'aux') {
-      return false;
-    }
-    return true;
-  });
-
-  for (let j = 0; j < files.length; j += 1) {
-    const codeFile = files[j];
-    const codeFileParentPath = `${dir}/`;
-    const codeFileName = await filingChecks(codeFile, codeFileParentPath, a); // eslint-disable-line no-await-in-loop
-    await setup(`${codeFileName}.code`, codeFileParentPath, backend, a); // eslint-disable-line no-await-in-loop
-  }
-}
-
-async function runSetupAll(a) {
-  // check we're parsing the correct directory:
-  console.group('Checking pwd...');
-  let pwd = process.cwd();
-  console.log(`pwd: ${pwd}`);
-  const pwdName = pwd.substring(pwd.lastIndexOf('/') + 1, pwd.length);
-  console.log(`pwdName: ${pwdName}`);
-  if (pwdName !== config.ZKP_PWD) {
-    throw new Error(`Wrong PWD. Please call this executable file from: ${config.ZKP_PWD}`);
-  }
-  pwd += '/code/';
-  console.groupEnd();
-
-  let dirs = getDirectories(pwd);
-  console.log('\n\ndirs in', pwd, ':');
-  console.log(dirs);
-
-  // filter dirs to those of interest to us
-  dirs = dirs.filter(dir => {
-    const dirName = dir.substring(dir.lastIndexOf('/') + 1, dir.length);
-    if (dirName === 'gm17') {
-      return true;
-    }
-    return false;
-  });
-  console.log('\n\nrelevant dirs in', pwd, ':');
-  console.log(dirs);
-  // get the dirs within the dirs
-  const dirs2 = [];
-  // get the files within the dirs
-  for (let k = 0; k < dirs.length; k += 1) {
-    dirs2[k] = getDirectories(dirs[k]);
-    console.log('\n\ndirs in', dirs[k], ':');
-    console.log(dirs2[k]);
-
-    for (let l = 0; l < dirs2[k].length; l += 1) {
-      const dir = dirs[k];
-      const dir2 = dirs2[k][l];
-
-      let files = await checkForOldFiles(dir2); // eslint-disable-line no-await-in-loop
-      if (files !== []) {
-        await rmOldFiles(dir2, files); // eslint-disable-line no-await-in-loop
-        files = await readdirAsync(dir2); // eslint-disable-line no-await-in-loop
-        // filter all files for ones with extension .code or .pcode
-        files = files.filter(f => {
-          const codeFileExt = f.substring(f.lastIndexOf('.') + 1, f.length);
-          const codeFilePrefix = f.substring(0, 3);
-          if (codeFileExt !== 'pcode' || codeFilePrefix === 'aux') {
-            return false;
-          }
-          return true;
-        });
-        for (let j = 0; j < files.length; j += 1) {
-          const codeFile = files[j];
-          const codeFileParentPath = `${dir2}/`;
-          const backend = dir.substring(dir.lastIndexOf('/') + 1, dir.length);
-          const codeFileName = await filingChecks(codeFile, codeFileParentPath, a); // eslint-disable-line no-await-in-loop
-
-          try {
-            await setup(`${codeFileName}.code`, codeFileParentPath, backend, a); // eslint-disable-line no-await-in-loop
-          } catch (err) {
-            console.log(err);
-            break;
-          }
-        }
+/**
+ * Main entrypoint from command line
+ */
+async function run() {
+  console.log("====");
+  console.log("==== 🌃 NIGHTFALL ZKP");
+  if (action === "setup") {
+    console.log("==== Proof setup");
+    console.log("==== Code path:       " + codePath);
+    console.log("==== Build directory: " + mainBuildDirectory);
+    console.log("==== This may take an hour or so.");
+    console.log("====\n");
+    
+    let codeToBuildDir = {};
+    if (codePath.endsWith(".pcode") || codePath.endsWith(".code")) {
+      codeToBuildDir[codePath] = mainBuildDirectory;
+    } else {
+      const matches = glob.sync("**/*.@(code|pcode)", {cwd: path.resolve(codePath)});
+      for (let index = 0; index < matches.length; index++) {
+        const match = matches[index]
+        codeToBuildDir[path.resolve(codePath, match)] = path.resolve(mainBuildDirectory, path.dirname(match)) + "/";
       }
     }
-  }
-}
-
-async function allOrOne() {
-  if (!i) {
-    console.log(
-      "The '-i' option has not been specified.\nThat's OK, we can go ahead and loop through every .code or .pcode file.\nHOWEVER, if you wanted to choose just one file, cancel this process, and instead use option -i, e.g.: 'node src/tools-tar-create.js -i my-code.code'",
-    );
-    console.log('Be warned, this could take up to an hour!');
-
-    // beep(2);
-    const carryOn = await inquirer.prompt([
-      {
-        type: 'yesno',
-        name: 'continue',
-        message: 'Continue?',
-        choices: ['y', 'n'],
-      },
-    ]);
-    if (carryOn.continue !== 'y') return;
-
-    try {
-      runSetupAll(a1); // we'll do all .code (or .pcode) files if no option is specified
-    } catch (err) {
-      throw new Error(`${err}Trusted setup failed.`);
+    for (const codeFile in codeToBuildDir) {
+      const buildDir = codeToBuildDir[codeFile];
+      await ensureBuildDirectoryIsEmpty(buildDir);
+      console.log("==");
+      console.log("== Performing setup: " + path.basename(codeFile));
+      console.log("== " + codeFile);
+      console.log("== " + buildDir);
+      console.log("==");
+      console.log();
+      try {
+        fs.mkdirSync(buildDir, {recursive: true});
+        const backend = inferBackendFromFilePath(codeFile);
+        await performPreprocessing(codeFile, buildDir);
+        await setup(buildDir, backend);
+      } catch (err) {
+        throw err;
+      } 
     }
-  } else {
-    await runSetup(a1);
+    console.log("==");
+    console.log("== 🌃 NIGHTFALL ZKP SETUP COMPLETE 🌃");
+    console.log("==");
+    } else if (action === "witness") {
+    console.log("== Witness calculation");
+    console.log("== Build directory: " + mainBuildDirectory);
+    console.log("== Arguments: " + argumentsForComputeWitness);
+    console.log("==\n");
+    throw new Error("witness calculation not yet implemented");
   }
 }
 
-// RUN
-allOrOne().catch(err => console.log(err));
+// RUN /////////////////////////////////////////////////////////////////////////
+run().catch(err => {
+  console.log("TRUSTED SETUP FAILED: " + err);
+  throw err;
+});

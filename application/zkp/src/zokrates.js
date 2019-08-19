@@ -107,16 +107,33 @@ This function and the following ones are direct equivalents of the corresponding
 ZoKrates function.  They return Promises that resolve to the output (stdout, stderr)
 from ZoKrates.
 */
-async function compile(container, codeFile) {
+
+/**
+ * @see https://github.com/Zokrates/ZoKrates/blob/master/zokrates_cli/src/bin.rs#L59
+ * 
+ * @param {Docker.container} container
+ * @param {*} input 
+ * @param {*} output default is "out"
+ * @param {*} light default is false
+ */
+async function compile(container, input, output, light) {
   console.log('Compiling code in the container - this can take some minutes...');
-  // var config = Config.getProps()
+  let command = [
+    config.ZOKRATES_APP_FILEPATH_ABS,
+    'compile',
+    '-i',
+    config.ZOKRATES_CONTAINER_CODE_DIRPATH_ABS + input,
+  ];
+  if (output) {
+    command.push("-o");
+    command.push(config.ZOKRATES_CONTAINER_CODE_DIRPATH_ABS + output);
+  }
+  if (typeof light !== 'undefined' && light === true) {
+    command.push("--light")
+  }
+  console.log("Executing: " + JSON.stringify(command));
   const exec = await container.exec.create({
-    Cmd: [
-      config.ZOKRATES_APP_FILEPATH_ABS,
-      'compile',
-      '-i',
-      config.ZOKRATES_CONTAINER_CODE_DIRPATH_ABS + codeFile,
-    ],
+    Cmd: command,
     AttachStdout: true,
     AttachStderr: true,
   });

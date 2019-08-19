@@ -1,2 +1,5 @@
 node_modules
 mochawesome-report
+
+# All user database files and configuration keys are kept here
+/local
