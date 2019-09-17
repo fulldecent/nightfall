@@ -1,10 +1,29 @@
 /**
-@module config.js
-@author Westlad, Chaitanya-Konda, iAmMichaelConnor
-@desc constants used by a nubmer of other modules
-*/
+ * Module constants switcher
+ *
+ * @module config.js
+ * @author Westlad, Chaitanya-Konda, iAmMichaelConnor
+ * @desc runtime constants which can be selected using NODE_ENV
+ *
+ * To choose the constants at runtime, set the environment variable NODE_ENV.
+ * We have a few abstractions for ease of development, packaging and
+ * orchestration. So the equivalent commands to run this module are:
+ *
+ *     babel-node ./src/index.js
+ *     nodemon --exec babel-node ./src/index.js
+ *     npm start
+ *     docker run ...
+ *     docker-compose up [...]
+ *
+ * In Docker Compose you will set the environment variable like so:
+ *
+ * services:
+ *   ...
+ *     environment:
+ *       NODE_ENV: test
+ */
 
-let env = 'local'; // set the environment to local if not mentioned while starting the app
+let env = 'local'; // Default environment, if not specified in NODE_ENV
 
 /* PATH NAMING CONVENTIONS:
 
@@ -91,12 +110,12 @@ const props = {
     ...commonConfig,
     zkp: {
       app: {
-        host: 'http://zkp',
-        port: '80',
+        host: process.env.ZKP_HOST,
+        port: process.env.ZKP_PORT,
       },
       rpc: {
-        host: 'http://ganache',
-        port: '8545',
+        host: process.env.BLOCKCHAIN_HOST,
+        port: process.env.BLOCKCHAIN_PORT,
       },
       volume: 'nightfall_zkp-code',
     },
@@ -105,12 +124,12 @@ const props = {
     ...commonConfig,
     zkp: {
       app: {
-        host: 'http://zkp_test',
-        port: '80',
+        host: process.env.ZKP_HOST,
+        port: process.env.ZKP_PORT,
       },
       rpc: {
-        host: 'http://ganache_test',
-        port: '8545',
+        host: process.env.BLOCKCHAIN_HOST,
+        port: process.env.BLOCKCHAIN_PORT,
       },
       volume: 'nightfall_zkp_code_test',
     },
@@ -121,7 +140,7 @@ const props = {
  * Set the environment
  * @param { string } environment - environment of app
  */
-function setEnv(environment) {
+export function setEnv(environment) {
   if (props[environment]) {
     env = environment;
   }
@@ -129,11 +148,6 @@ function setEnv(environment) {
 setEnv(process.env.NODE_ENV);
 
 /**
- * get the appropriate environment config
- */
-const getProps = () => props[env];
-
-export default {
-  setEnv,
-  getProps,
-};
+ * Get the active environment configuration
+ */ 
+export const getProps = () => props[env];

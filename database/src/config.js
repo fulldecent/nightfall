@@ -1,10 +1,30 @@
 /**
-@module config.js
-@author Liju Jose
-@desc constants used by a nubmer of other modules
-*/
+ * Module constants switcher
+ *
+ * @module config.js
+ * @author Liju Jose
+ * @desc runtime constants which can be selected using NODE_ENV
+ *
+ * To choose the constants at runtime, set the environment variable NODE_ENV.
+ * We have a few abstractions for ease of development, packaging and
+ * orchestration. So the equivalent commands to run this module are:
+ *
+ *     babel-node ./src/index.js
+ *     nodemon --exec babel-node ./src/index.js
+ *     npm start
+ *     docker run ...
+ *     docker-compose up [...]
+ *
+ * In Docker Compose you will set the environment variable like so:
+ *
+ * services:
+ *   ...
+ *     environment:
+ *       NODE_ENV: test
+ */
 
-let env = 'local'; // set the environment to local if not mentioned while starting the app
+let env = 'local'; // Default environment, if not specified in NODE_ENV
+
 const props = {
   local: {
     mongo: {
@@ -40,6 +60,6 @@ export function setEnv(environment) {
 setEnv(process.env.NODE_ENV);
 
 /**
- * get the appropriate environment config
- */
+ * Get the active environment configuration
+ */ 
 export const getProps = () => props[env];
